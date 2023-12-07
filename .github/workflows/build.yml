@@ -2,8 +2,8 @@ name: Go Build and Release
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - '*'
 
 jobs:
   build:
@@ -16,7 +16,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v2
       with:
-        go-version: '1.21'
+        go-version: '1.17'
 
     - name: Build
       run: go build -o wordprinter
@@ -44,3 +44,20 @@ jobs:
         asset_name: wordprinter
         asset_content_type: application/octet-stream
         token: ${{ secrets.GITHUB_TOKEN }}
+
+  update-homebrew:
+    runs-on: ubuntu-latest
+    needs: release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Update Homebrew Formula
+      run: |
+        echo "Updating Homebrew Formula..."
+        sed -i.bak 's/sha256 ".*"/sha256 "$(shasum -a 256 wordprinter-v${{ github.ref }}.tar.gz | awk '{print $1}')"/' Formula/wordprinter.rb
+        git add Formula/wordprinter.rb
+        git commit -m "Update Homebrew Formula for version ${{ github.ref }}" || true
+        git push origin main
