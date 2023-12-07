@@ -1,0 +1,56 @@
+name: Build and release Wordprint
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16
+
+      - name: Build
+        run: go build -o wordprint wordprint.go
+
+  calculate-checksum:
+    runs-on: ubuntu-latest
+
+    needs: build
+
+    steps:
+      - name: Calculate SHA256 Checksum
+        id: checksum
+        run: echo "HOMEBREW_WORDPRINT_SHA256=$(shasum -a 256 wordprint | awk '{print $1}')" >> $GITHUB_ENV
+
+  release:
+    runs-on: ubuntu-latest
+
+    needs: [build, calculate-checksum]
+
+    steps:
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        with:
+          files: wordprint
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Get Release Version
+        id: get_version
+        run: echo "HOMEBREW_WORDPRINT_VERSION=$(echo ${{ steps.create_release.outputs.release_version }} | cut -c 2-)" >> $GITHUB_ENV
+
+      - name: Update Homebrew Formula
+        run: |
+          sed -i '' -e "s/url \"https:\/\/github\.com\/yourusername\/your-repo\/releases\/download\/v1.0\/wordprint\"/url \"https:\/\/github\.com\/yourusername\/your-repo\/releases\/download\/v${{ env.HOMEBREW_WORDPRINT_VERSION }}\/wordprint\"/" Formula/wordprint.rb
+          sed -i '' -e "s/sha256 \"your_sha256_checksum\"/sha256 \"${{ env.HOMEBREW_WORDPRINT_SHA256 }}\"/" Formula/wordprint.rb
+        working-directory: Formula
